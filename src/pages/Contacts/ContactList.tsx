@@ -47,7 +47,27 @@ export default function ContactList() {
         return false
     })
 
-    if (loading) return <div className="p-8 text-center">Loading contacts...</div>
+    if (loading) return (
+        <div className="p-8 max-w-7xl mx-auto space-y-8 animate-pulse">
+            <div className="flex justify-between items-center">
+                <div className="space-y-2">
+                    <div className="h-8 bg-gray-100 rounded w-48"></div>
+                    <div className="h-4 bg-gray-100 rounded w-32"></div>
+                </div>
+                <div className="flex gap-4">
+                    <div className="h-10 bg-gray-100 rounded w-24"></div>
+                    <div className="h-10 bg-gray-100 rounded w-32"></div>
+                    <div className="h-10 bg-gray-100 rounded w-32"></div>
+                </div>
+            </div>
+            <div className="h-10 bg-gray-100 rounded w-full max-w-md"></div>
+            <div className="space-y-4">
+                {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="h-16 bg-gray-100 rounded w-full"></div>
+                ))}
+            </div>
+        </div>
+    )
 
     return (
         <div className="p-8 max-w-7xl mx-auto">

@@ -298,9 +298,9 @@ export default function ContactProfile() {
         <div className="p-4 md:p-8 max-w-4xl mx-auto animate-in fade-in duration-500 bg-white min-h-screen">
             <button
                 onClick={() => navigate('/contacts')}
-                className="mb-6 text-gray-500 hover:text-black transition-colors flex items-center gap-2 font-medium"
+                className="mb-8 text-gray-400 hover:text-black transition-all flex items-center gap-2 font-medium text-sm hover:-translate-x-1 duration-200 group"
             >
-                <ArrowLeft size={16} /> Back to Contacts
+                <ArrowLeft size={18} className="transition-transform group-hover:scale-110" /> Back to Contacts
             </button>
 
             {/* Header */}
@@ -429,25 +429,25 @@ export default function ContactProfile() {
                                         </div>
                                         <p className="text-lg text-gray-600 font-medium mb-1">{contact.job || 'No Job Title'}</p>
 
-                                        <div className="flex gap-2 mt-2">
+                                        <div className="flex gap-2 mt-3">
                                             <button
                                                 onClick={handleEnrichContact}
                                                 disabled={enriching}
-                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${enriching
-                                                    ? (enrichmentStatus === 'analyzing' ? 'bg-purple-50 text-purple-600 border-purple-200 cursor-not-allowed' : 'bg-blue-50 text-blue-600 border-blue-200 cursor-not-allowed')
-                                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all shadow-sm ${enriching
+                                                    ? (enrichmentStatus === 'analyzing' ? 'bg-purple-50 text-purple-700 border-purple-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-200 cursor-not-allowed')
+                                                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-black hover:shadow-md'
                                                     }`}
                                             >
-                                                {enriching ? <Sparkles size={14} className="animate-spin" /> : <Search size={14} />}
+                                                {enriching ? <Sparkles size={16} className="animate-spin text-purple-500" /> : <Search size={16} />}
                                                 {enriching ? statusMessage : 'Find Online Info'}
                                             </button>
                                             <a
                                                 href={`https://www.google.com/search?q=${encodeURIComponent(contact.name + " news")}&tbm=nws`}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all shadow-sm hover:shadow-md"
                                             >
-                                                <Newspaper size={14} />
+                                                <Newspaper size={16} />
                                                 Check News
                                             </a>
                                         </div>
