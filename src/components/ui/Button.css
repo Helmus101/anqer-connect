@@ -1,0 +1,80 @@
+.pally-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 99px;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pally-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Variants */
+.pally-button.primary {
+    background-color: var(--accent-primary);
+    color: var(--bg-primary);
+}
+
+.pally-button.primary:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.pally-button.secondary {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+}
+
+.pally-button.secondary:hover:not(:disabled) {
+    background-color: var(--bg-hover);
+    border-color: var(--text-tertiary);
+}
+
+.pally-button.ghost {
+    background-color: transparent;
+    color: var(--text-secondary);
+}
+
+.pally-button.ghost:hover:not(:disabled) {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Sizes */
+.pally-button.sm {
+    padding: 0 1rem;
+    height: 32px;
+    font-size: 0.875rem;
+}
+
+.pally-button.md {
+    padding: 0 1.5rem;
+    height: 44px;
+    font-size: 0.9375rem;
+}
+
+.pally-button.lg {
+    padding: 0 2rem;
+    height: 52px;
+    font-size: 1rem;
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
