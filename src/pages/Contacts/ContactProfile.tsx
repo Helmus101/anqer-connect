@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Sparkles, Globe, Pencil, X, Check, Newspaper, Search, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react'
+import { ArrowLeft, Sparkles, Globe, Pencil, X, Check, Search, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react'
 import { getContactById } from '../../services/contactService'
 import type { Contact, Interaction } from '../../types'
 import InteractionTimeline from '../../components/contacts/InteractionTimeline'
@@ -82,14 +82,20 @@ export default function ContactProfile() {
         })
     }
 
-    const [enrichmentStatus, setEnrichmentStatus] = useState<'idle' | 'searching' | 'analyzing' | 'complete' | 'error'>('idle')
-    const [statusMessage, setStatusMessage] = useState('')
+    // const [enrichmentStatus, setEnrichmentStatus] = useState<'idle' | 'searching' | 'analyzing' | 'complete' | 'error'>('idle')
+    // const [statusMessage, setStatusMessage] = useState('')
+    const [enrichmentLog, setEnrichmentLog] = useState<{ message: string, type: 'info' | 'info-bold' | 'success' | 'error' }[]>([])
+
+    const addLog = (message: string, type: 'info' | 'info-bold' | 'success' | 'error' = 'info') => {
+        setEnrichmentLog(prev => [...prev, { message, type }])
+    }
 
     const handleEnrichContact = async () => {
         if (!contact) return
-        setEnrichmentStatus('searching')
-        setStatusMessage('Searching Google...')
+        setEnrichmentLog([])
         setEnriching(true)
+        addLog(`Starting enrichment for ${contact.name}...`, 'info-bold')
+        addLog("Initializing Google Search module...", 'info')
 
         try {
             // Step 1: Search
@@ -112,8 +118,12 @@ export default function ContactProfile() {
                 throw new Error("Search failed or no results found.")
             }
 
-            setEnrichmentStatus('analyzing')
-            setStatusMessage(`Found ${searchData.results.length} results. Analyzing...`)
+            if (searchData.queries) {
+                searchData.queries.forEach((q: string) => addLog(`Searching Google: ${q}`, 'info'))
+            }
+            addLog(`Found ${searchData.results.length} unique results.`, 'success')
+            searchData.results.forEach((r: any) => addLog(`Target Found: ${r.link}`, 'info'))
+            addLog("Analyzing content & verifying identity...", 'info-bold')
 
             // Step 2: Analyze
             const analyzeRes = await fetch('/.netlify/functions/enrich-contact', {
@@ -124,25 +134,28 @@ export default function ContactProfile() {
             const analyzeData = await analyzeRes.json()
 
             if (analyzeData.success) {
+                addLog("Identity Verified.", 'success')
+                if (analyzeData.enriched.bio) addLog("Extracted Bio.", 'info')
+                if (analyzeData.enriched.interests) addLog(`Extracted ${analyzeData.enriched.interests.length} interests.`, 'info')
+                if (analyzeData.enriched.social_links) addLog(`Found ${analyzeData.enriched.social_links.length} social profiles.`, 'info')
+
                 const updated = await getContactById(contact.id)
                 setContact(updated || null)
-                setEnrichmentStatus('complete')
-                setStatusMessage(`Success! Added ${analyzeData.enriched.interests?.length || 0} interests.`)
-                addToast(`Enrichment complete! Added ${analyzeData.enriched.interests?.length || 0} details.`, 'success')
-                setTimeout(() => { setEnrichmentStatus('idle'); setEnriching(false) }, 3000)
+                addToast(`Enrichment complete!`, 'success')
+
+                addLog("Completed successfully.", 'success')
+                setTimeout(() => { setEnriching(false) }, 5000)
             } else {
-                setEnrichmentStatus('error')
-                setStatusMessage(`Skipped: ${analyzeData.reason}`)
+                addLog(`Verification failed: ${analyzeData.reason}`, 'error')
                 addToast(`Enrichment skipped: ${analyzeData.reason}`, 'info')
-                setTimeout(() => { setEnrichmentStatus('idle'); setEnriching(false) }, 3000)
+                setTimeout(() => { setEnriching(false) }, 5000)
             }
 
         } catch (err: any) {
             console.error(err)
-            setEnrichmentStatus('error')
-            setStatusMessage("Error: " + err.message)
+            addLog(`Error: ${err.message}`, 'error')
             addToast("Enrichment failed: " + err.message, 'error')
-            setTimeout(() => { setEnrichmentStatus('idle'); setEnriching(false) }, 3000)
+            setTimeout(() => { setEnriching(false) }, 5000)
         }
     }
 
@@ -399,7 +412,7 @@ export default function ContactProfile() {
                                         <button onClick={handleSaveProfile} className="bg-black text-white px-4 py-2 rounded text-sm font-bold flex items-center gap-2"><Check size={14} /> Save</button>
                                         <button onClick={() => setIsEditing(false)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm font-bold flex items-center gap-2"><X size={14} /> Cancel</button>
                                     </div>
-                                </div >
+                                </div>
                             ) : (
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-start">
@@ -434,24 +447,33 @@ export default function ContactProfile() {
                                                 onClick={handleEnrichContact}
                                                 disabled={enriching}
                                                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all shadow-sm ${enriching
-                                                    ? (enrichmentStatus === 'analyzing' ? 'bg-purple-50 text-purple-700 border-purple-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-200 cursor-not-allowed')
+                                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
                                                     : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-black hover:shadow-md'
                                                     }`}
                                             >
                                                 {enriching ? <Sparkles size={16} className="animate-spin text-purple-500" /> : <Search size={16} />}
-                                                {enriching ? statusMessage : 'Find Online Info'}
+                                                {enriching ? 'Enriching...' : 'Find Online Info'}
                                             </button>
-                                            <a
-                                                href={`https://www.google.com/search?q=${encodeURIComponent(contact.name + " news")}&tbm=nws`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all shadow-sm hover:shadow-md"
-                                            >
-                                                <Newspaper size={16} />
-                                                Check News
-                                            </a>
                                         </div>
                                     </div>
+
+                                    {/* Enrichment Log Display */}
+                                    {enriching && (
+                                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100 font-mono text-xs text-gray-600 space-y-2 max-h-60 overflow-y-auto">
+                                            <div className="flex items-center gap-2 mb-2 font-bold text-gray-800 border-b pb-2">
+                                                <Sparkles size={12} className="text-purple-500" /> enrichment_log.sh
+                                            </div>
+                                            {enrichmentLog.map((log, i) => (
+                                                <div key={i} className="flex gap-2">
+                                                    <span className="text-gray-400">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
+                                                    <span className={log.type === 'error' ? 'text-red-500' : log.type === 'success' ? 'text-green-600 font-bold' : log.type === 'info-bold' ? 'text-blue-700 font-bold' : 'text-gray-700'}>
+                                                        {log.message}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
 
                                     <div className="text-sm text-gray-400 mb-4 space-y-1">
                                         {contact.location && <p>📍 {contact.location}</p>}
@@ -482,9 +504,11 @@ export default function ContactProfile() {
                                         {!contact.socialLinks && contact.linkedin && <a href={contact.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">LinkedIn ↗</a>}
                                         {!contact.socialLinks && contact.twitter && <a href={contact.twitter} target="_blank" rel="noopener noreferrer" className="text-xs bg-sky-50 text-sky-700 px-2 py-1 rounded">Twitter ↗</a>}
                                     </div>
+
+
                                 </div>
                             )}
-                        </div >
+                        </div>
 
                         {!isEditing && (
                             <div className="flex gap-2">
@@ -503,12 +527,12 @@ export default function ContactProfile() {
                                 </button>
                             </div>
                         )}
-                    </div >
-                </div >
-            </div >
+                    </div>
+                </div>
+            </div>
 
             {/* Actions Bar */}
-            < div className="flex gap-3 mb-8" >
+            <div className="flex gap-3 mb-8">
                 <button
                     onClick={() => setIsLogModalOpen(true)}
                     className="bg-black text-white px-6 py-2 rounded-md font-bold hover:bg-gray-900 transition-colors shadow-sm"
@@ -522,13 +546,10 @@ export default function ContactProfile() {
                     <Sparkles size={16} /> Analyze
                 </button>
 
-                {/* Suggested Topics / Conversation Starters */}
                 <ConversationStarters contactId={contact.id} />
-
-            </div >
+            </div>
 
             {/* AI Summary Section */}
-            {/* AI Summary & Relationship Section */}
             {
                 (contact.aiSummary || contact.relationshipSummary) && (
                     <div className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg p-6 md:p-8 mb-8 shadow-sm">
@@ -661,6 +682,6 @@ export default function ContactProfile() {
                 onError={(err) => alert(err)}
             />
 
-        </div >
+        </div>
     )
 }
