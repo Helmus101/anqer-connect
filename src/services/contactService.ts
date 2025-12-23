@@ -6,7 +6,8 @@ export const getContacts = async (): Promise<Contact[]> => {
         .from('contacts')
         .select(`
             *,
-            interactions (*)
+            interactions (*),
+            events (*)
         `)
         .order('last_contacted', { ascending: false })
 
@@ -26,7 +27,11 @@ export const getContacts = async (): Promise<Contact[]> => {
         interactions: (c.interactions || []).map((i: any) => ({
             ...i,
             contactId: i.contact_id
-        })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        events: (c.events || []).map((e: any) => ({
+            ...e,
+            contactId: e.contact_id
+        })).sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime())
     })) as Contact[]
 }
 
@@ -35,7 +40,8 @@ export const getContactById = async (id: string): Promise<Contact | undefined> =
         .from('contacts')
         .select(`
             *,
-            interactions (*)
+            interactions (*),
+            events (*)
         `)
         .eq('id', id)
         .single()
@@ -56,7 +62,11 @@ export const getContactById = async (id: string): Promise<Contact | undefined> =
         interactions: (data.interactions || []).map((i: any) => ({
             ...i,
             contactId: i.contact_id
-        })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        events: (data.events || []).map((e: any) => ({
+            ...e,
+            contactId: e.contact_id
+        })).sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime())
     } as Contact
 }
 
@@ -182,7 +192,10 @@ export const updateContact = async (id: string, updates: Partial<Contact>) => {
     if (updates.email !== undefined) dbUpdates.email = updates.email
     if (updates.phone !== undefined) dbUpdates.phone = updates.phone
     if (updates.job !== undefined) dbUpdates.job = updates.job
-    if (updates.location !== undefined) dbUpdates.location = updates.location
+    if (updates.location !== undefined) {
+        dbUpdates.location = updates.location
+        dbUpdates.address = updates.location
+    }
     if (updates.bio !== undefined) dbUpdates.bio = updates.bio
     if (updates.aiSummary !== undefined) dbUpdates.ai_summary = updates.aiSummary
     if (updates.interests !== undefined) dbUpdates.interests = updates.interests
@@ -195,7 +208,9 @@ export const updateContact = async (id: string, updates: Partial<Contact>) => {
     if (updates.instagram !== undefined) dbUpdates.instagram = updates.instagram
     if (updates.facebook !== undefined) dbUpdates.facebook = updates.facebook
     if (updates.snapchat !== undefined) dbUpdates.snapchat = updates.snapchat
-    if (updates.coordinates !== undefined) dbUpdates.coordinates = updates.coordinates
+    if (updates.relationshipSummary !== undefined) dbUpdates.relationship_summary = updates.relationshipSummary
+    if (updates.lastAnalyzed !== undefined) dbUpdates.last_analyzed = updates.lastAnalyzed
+    if (updates.coordinates !== undefined) dbUpdates.coordinates = `(${updates.coordinates.lng},${updates.coordinates.lat})`
 
     // Fallback: If we just pass 'updates', TS keys might not match DB keys. 
     // The explicit mapping above is safest.
@@ -211,24 +226,52 @@ export const updateContact = async (id: string, updates: Partial<Contact>) => {
     return data
 }
 
-export const enrichContact = async (contactId: string) => {
+export const enrichContact = async (contactId: string, contact?: Partial<Contact>) => {
     const { data: { session } } = await supabase.auth.getSession()
-    const res = await fetch('/.netlify/functions/enrich-contact', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || ''}`
-        },
-        body: JSON.stringify({ contactId })
-    })
-    if (!res.ok) {
-        // Try to parse error message explicitly
-        let errorMessage = 'Enrichment failed'
+
+    try {
+        const res = await fetch('/.netlify/functions/enrich-contact', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token || ''}`
+            },
+            body: JSON.stringify({
+                contactId,
+                contact: contact || undefined
+            })
+        })
+
+        // Handle 504 timeout errors
+        if (res.status === 504) {
+            throw new Error('Enrichment timed out. The process is taking longer than expected. Please try again.')
+        }
+
+        // Try to parse JSON, but handle HTML error pages
+        let data
+        const text = await res.text()
         try {
-            const errData = await res.json()
-            errorMessage = errData.error || errData.reason || errorMessage
-        } catch (e) { }
-        throw new Error(errorMessage)
+            data = JSON.parse(text)
+        } catch (parseErr) {
+            // If response is HTML (like a 504 error page), throw a timeout error
+            if (text.includes('<HTML>') || text.includes('<!DOCTYPE')) {
+                throw new Error('Enrichment timed out. The process is taking longer than expected. Please try again.')
+            }
+            throw new Error('Invalid response from server')
+        }
+
+        if (!res.ok || !data.success) {
+            // Handle both HTTP errors and business logic failures
+            const errorMessage = data.error || data.reason || 'Enrichment failed'
+            throw new Error(errorMessage)
+        }
+
+        return data
+    } catch (err: any) {
+        // Re-throw with better error message
+        if (err.message) {
+            throw err
+        }
+        throw new Error('Enrichment failed. Please try again.')
     }
-    return await res.json()
 }

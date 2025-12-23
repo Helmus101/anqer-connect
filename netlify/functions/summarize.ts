@@ -192,7 +192,8 @@ const handler: Handler = async (event) => {
 
         TASK 2: EXTRACT INTERESTS
         Run NLP extraction on valid sources:
-        - Extract Noun phrases (Sports, Hobbies, Professional Topics).
+        - Extract sustained interests (Sports, Hobbies, Professional Topics).
+        - Normalize names: "playing tennis" -> "Tennis".
         - Remove: Locations, Names, Companies.
         
         TASK 3: SCORE INTEREST CONFIDENCE
@@ -200,7 +201,13 @@ const handler: Handler = async (event) => {
         - Appears in >=2 sources: +0.4
         - Appears >=3 times total: +0.3
         - Explicit phrasing ("I play...", "I write about..."): +0.3
-        -> DISCARD interests with Confidence < 0.5.
+        -> DISCARD interests with Confidence < 0.7. (STRICT Threshold)
+
+        TASK 3.5: NEGATIVE FILTER (CRITICAL)
+        - EXCLUDE: "Work", "Meeting", "Call", "Lunch", "Dinner", "Coffee".
+        - EXCLUDE: One-off events.
+        - EXCLUDE: Locations (unless explicitly "Travel to X").
+        - REQUIREMENT: Must be a hobby, passion, or professional expertise.
 
         TASK 4: DETECT EVENTS (Optional)
         Scan for terms: "joined", "announced", "spoke at", "published".
@@ -222,7 +229,7 @@ const handler: Handler = async (event) => {
             "match_reasoning": "Explain score calculation",
             "summary": "2-sentence strict summary of verified facts.",
             "interests": [
-                { "name": "Topic", "category": "Professional|Personal", "confidence": 0.0-1.0, "source_url": "url" }
+                { "name": "Interest Name (Normalized)", "category": "Professional|Personal", "confidence": 0.0-1.0, "source_url": "url" }
             ],
             "events": [
                 { "description": "Event description", "date": "Date or null", "source_url": "url" }

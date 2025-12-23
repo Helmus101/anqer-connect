@@ -20,15 +20,14 @@ export default function AddressAutocomplete({ value, onChange, onSelect }: Addre
             if (query.length > 2 && isOpen) {
                 setIsLoading(true)
                 try {
-                    // Use Photon API (OpenStreetMap based, often faster text search)
-                    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`)
+                    // Use Nominatim API (OpenStreetMap geocoding)
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`)
                     const data = await res.json()
-                    // Photon returns GeoJSON features
-                    setSuggestions(data.features.map((f: any) => ({
-                        display_name: [f.properties.name, f.properties.street, f.properties.city, f.properties.country].filter(Boolean).join(', '),
-                        ...f.properties,
-                        lat: f.geometry.coordinates[1],
-                        lon: f.geometry.coordinates[0]
+                    setSuggestions(data.map((item: any) => ({
+                        display_name: item.display_name,
+                        ...item,
+                        lat: parseFloat(item.lat),
+                        lon: parseFloat(item.lon)
                     })))
                 } catch (err) {
                     console.error("Address fetch error", err)

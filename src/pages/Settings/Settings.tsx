@@ -10,7 +10,7 @@ import { getContacts } from '../../services/contactService'
 import { sendFriendRequest, getFriendRequests, acceptFriendRequest, getFriends } from '../../services/friendService'
 import { googleService } from '../../services/googleService'
 
-import { generateContactSummary } from '../../services/summaryService'
+
 
 export default function Settings() {
     const { signInWithGoogle } = useAuth()
@@ -21,7 +21,7 @@ export default function Settings() {
     const [syncing, setSyncing] = useState(false)
     const [lastSync, setLastSync] = useState<string | null>(null)
 
-    // Batch Enrich Handler
+    // Batch Deep Analysis Handler
     const handleBatchEnrich = async () => {
         const allContacts = await getContacts()
         if (!allContacts || allContacts.length === 0) {
@@ -29,43 +29,58 @@ export default function Settings() {
             return
         }
 
-        if (!confirm("Start Full Analysis? This will analyze interactions for all contacts.")) return
+        if (!confirm("Start Deep Analysis Batch? This will performing Google Searches and AI analysis for ALL contacts. This may take a long time.")) return
 
         setBatchProgress({ current: 0, total: allContacts.length })
         setBatchLog([])
 
-        // Batched Processing (Chunk size: 10 for simultaneous feel)
-        const BATCH_SIZE = 10
+        // Process sequentially to be gentle on Rate Limits (Google Search limits)
         let processed = 0
 
-        for (let i = 0; i < allContacts.length; i += BATCH_SIZE) {
-            const batch = allContacts.slice(i, i + BATCH_SIZE)
+        for (const contact of allContacts) {
+            try {
+                setBatchLog(prev => [`Analyzing ${contact.name}...`, ...prev.slice(0, 8)])
 
-            // Process batch in parallel
-            await Promise.all(batch.map(async (contact) => {
-                try {
-                    setBatchLog(prev => [`Analyzing ${contact.name}...`, ...prev.slice(0, 4)])
+                // Call deep-analyze function
+                const response = await fetch('/.netlify/functions/deep-analyze', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        contactId: contact.id,
+                        name: contact.name,
+                        location: contact.location,
+                        job: contact.job,
+                        email: contact.email,
+                        interactions: contact.interactions || []
+                    })
+                })
 
-                    // Unified Service handles logic + DB update
-                    await generateContactSummary(contact.id, 'analysis')
+                const data = await response.json()
 
-                    setBatchLog(prev => [`✅ Updated ${contact.name}`, ...prev.slice(0, 4)])
-                } catch (err: any) {
-                    console.error(err)
-                    setBatchLog(prev => [`❌ Failed: ${contact.name} (${err.message})`, ...prev.slice(0, 4)])
-                } finally {
-                    processed++
-                    setBatchProgress({ current: processed, total: allContacts.length })
+                if (data.success) {
+                    // Update contact
+                    const { updateContact } = await import('../../services/contactService')
+                    await updateContact(contact.id, {
+                        interests: data.interests || [],
+                        relationshipSummary: data.relationshipSummary || contact.relationshipSummary
+                    })
+
+                    setBatchLog(prev => [`✓ ${contact.name}: Found ${data.interests?.length || 0} interests`, ...prev.slice(0, 8)])
+                } else {
+                    setBatchLog(prev => [`❌ Failed: ${contact.name}`, ...prev.slice(0, 8)])
                 }
-            }))
 
-            // Small breathing room between batches
-            if (i + BATCH_SIZE < allContacts.length) {
-                await new Promise(r => setTimeout(r, 200))
+            } catch (err: any) {
+                console.error(err)
+                setBatchLog(prev => [`❌ Failed: ${contact.name} (${err.message})`, ...prev.slice(0, 8)])
+            } finally {
+                processed++
+                setBatchProgress({ current: processed, total: allContacts.length })
+                // Wait 1 second between contacts to avoid rate limits
+                await new Promise(r => setTimeout(r, 1500))
             }
         }
 
-        setBatchLog(prev => [`Full Analysis Complete! Processed ${processed} contacts.`, ...prev])
+        setBatchLog(prev => [`Full Batch Analysis Complete! Processed ${processed} contacts.`, ...prev])
         setTimeout(() => setBatchProgress(null), 5000)
     }
 

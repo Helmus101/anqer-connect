@@ -31,9 +31,9 @@ export async function analyzeInteractions(
     GOOGLE_CX: string
 ) {
     // 1. Prepare Interaction Inputs
-    // 1. Prepare Interaction Inputs (Limit to last 30 to prevent context overflow/timeout)
-    const recentInteractions = interactions ? interactions.slice(-30) : []
-    const historyText = recentInteractions.length > 0 ? recentInteractions.map((i: any) => {
+    // Use ALL interactions (not limited) - the AI will handle context intelligently
+    const allInteractions = interactions || []
+    const historyText = allInteractions.length > 0 ? allInteractions.map((i: any) => {
         const speaker = i.type === 'inbound' ? (contactName || "Contact") : "Me"
         return `[${i.date}] ${speaker}: ${i.content || i.notes}`
     }).join('\n') : "No interaction history."
@@ -107,22 +107,29 @@ export async function analyzeInteractions(
     - Verb-based: "I play", "I enjoy", "I'm into", "I've been doing".
     - Noun-based: "I've been working on [X]", "Planning [Y]".
     
-    STEP 2: FILTER
+    STEP 2: FILTER & SUSTAINED CHECK
     - Valid Phrases: "I enjoy climbing" (Keep). "I don't like tennis" (Ignore).
-    - Context: Ensure it is an active interest.
+    - Context: Ensure it is an active, REAL interest, not just a casual topic.
+    - SUSTAINED CHECK: Note if the interest appears across multiple interaction dates. "Sustained Mentions" are high value.
 
     STEP 3: SCORING (Confidence 0.0 - 1.0)
     Base Score Calculation:
     - Direct mention in text: +0.4
-    - Mentioned in >1 message: +0.3
-    - Repeated over time (different days): +0.2
-    - Explicit phrasing ("I play tennis"): +0.1
+    - SUSTAINED (Mentioned on >1 different days): +0.4 (High Boost)
+    - Repeated >1 times total: +0.2
+    - Explicit phrasing ("I play tennis", "I love reading"): +0.3
     -> Cap at 1.0. 
-    -> DISCARD if Score < 0.5.
+    -> DISCARD if Score < 0.7. (STRICT Threshold)
 
-    STEP 4: CATEGORIZE
-    - Personal: Sports, Hobbies, Travel, Cooking, Culture.
-    - Professional: Career goals, Skills, Industry topics, Technical expertise.
+    STEP 3.5: NEGATIVE FILTER (CRITICAL - REAL INTERESTS ONLY)
+    - EXCLUDE: "Work", "Meeting", "Call", "Lunch", "Dinner" (unless cooking/foodie), "Coffee", "Weather", "Traffic".
+    - EXCLUDE: One-off events ("I went to the store").
+    - EXCLUDE: Locations (unless explicitly "Travel to X").
+    - REQUIREMENT: Must be a hobby, passion, or professional expertise.
+
+    STEP 4: CATEGORIZE & NORMALIZE
+    - Normalize names: "playing tennis" -> "Tennis", "reading books" -> "Reading".
+    - Categories: Personal, Professional.
 
     STEP 5: TEMPORAL TRACKING
     - Extract "last_mentioned_at" date.
@@ -150,13 +157,13 @@ export async function analyzeInteractions(
         "summary": "Conversational summary ('Often talks about...')",
         "interests": [
             {
-                "name": "Interest Name",
+                "name": "Interest Name (Normalized)",
                 "category": "Personal|Professional",
                 "confidence": 0.5,
                 "last_mentioned_at": "YYYY-MM-DD"
             }
         ],
-        "relationship_summary": "COMPREHENSIVE ANALYSIS: Based on the ENTIRE interaction history provided, summarize the relationship dynamic. Analyze frequency, tone, and depth. (e.g. 'Close friend who we speak to weekly about hobbies' or 'New professional contact'). Explain reasoning.",
+        "relationship_summary": "COMPREHENSIVE ANALYSIS: based on the ENTIRE interaction history provided, summarize the relationship dynamic. Analyze frequency, tone, and depth. (e.g. 'Close friend who we speak to weekly about hobbies' or 'New professional contact'). Explain reasoning.",
         "detected_job_title": "Title or null",
         "detected_company": "Company or null",
         "detected_location": "City/Region or null",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Sparkles, Globe, Pencil, X, Check, Search, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react'
+import { ArrowLeft, Sparkles, Globe, Pencil, X, Check, Linkedin, Twitter, Instagram, Facebook } from 'lucide-react'
 import { getContactById } from '../../services/contactService'
 import type { Contact, Interaction } from '../../types'
 import InteractionTimeline from '../../components/contacts/InteractionTimeline'
@@ -22,9 +22,13 @@ export default function ContactProfile() {
     const [isAnalyzing, setIsAnalyzing] = useState(false)
     const [isLogModalOpen, setIsLogModalOpen] = useState(false)
 
+    // Enrichment State
+    const [enriching, setEnriching] = useState(false)
+    const [enrichmentLog, setEnrichmentLog] = useState<{ message: string, type: 'info' | 'info-bold' | 'success' | 'error' }[]>([])
+
     // Editing State
     const [isEditing, setIsEditing] = useState(false)
-    const [enriching, setEnriching] = useState(false)
+
     const [editForm, setEditForm] = useState({
         name: '',
         job: '',
@@ -53,7 +57,7 @@ export default function ContactProfile() {
             setEditForm({
                 name: contact.name,
                 job: contact.job || '',
-                location: contact.location || '',
+                location: contact.location || contact.address || '',
                 bio: contact.bio || '',
                 linkedin: contact.socialLinks?.find(s => s.platform === 'linkedin')?.url || contact.linkedin || '',
                 twitter: contact.socialLinks?.find(s => s.platform === 'twitter')?.url || contact.twitter || '',
@@ -80,83 +84,6 @@ export default function ContactProfile() {
             }
             return part
         })
-    }
-
-    // const [enrichmentStatus, setEnrichmentStatus] = useState<'idle' | 'searching' | 'analyzing' | 'complete' | 'error'>('idle')
-    // const [statusMessage, setStatusMessage] = useState('')
-    const [enrichmentLog, setEnrichmentLog] = useState<{ message: string, type: 'info' | 'info-bold' | 'success' | 'error' }[]>([])
-
-    const addLog = (message: string, type: 'info' | 'info-bold' | 'success' | 'error' = 'info') => {
-        setEnrichmentLog(prev => [...prev, { message, type }])
-    }
-
-    const handleEnrichContact = async () => {
-        if (!contact) return
-        setEnrichmentLog([])
-        setEnriching(true)
-        addLog(`Starting enrichment for ${contact.name}...`, 'info-bold')
-        addLog("Initializing Google Search module...", 'info')
-
-        try {
-            // Step 1: Search
-            const { supabase } = await import('../../lib/supabase')
-            const { data: { session } } = await supabase.auth.getSession()
-
-            const headers: any = { 'Content-Type': 'application/json' }
-            if (session?.access_token) {
-                headers['Authorization'] = `Bearer ${session.access_token}`
-            }
-
-            const searchRes = await fetch('/.netlify/functions/enrich-contact', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ contactId: contact.id, step: 'search' })
-            })
-            const searchData = await searchRes.json()
-
-            if (!searchData.success || !searchData.results) {
-                throw new Error("Search failed or no results found.")
-            }
-
-            if (searchData.queries) {
-                searchData.queries.forEach((q: string) => addLog(`Searching Google: ${q}`, 'info'))
-            }
-            addLog(`Found ${searchData.results.length} unique results.`, 'success')
-            searchData.results.forEach((r: any) => addLog(`Target Found: ${r.link}`, 'info'))
-            addLog("Analyzing content & verifying identity...", 'info-bold')
-
-            // Step 2: Analyze
-            const analyzeRes = await fetch('/.netlify/functions/enrich-contact', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ contactId: contact.id, step: 'analyze', searchResults: searchData.results })
-            })
-            const analyzeData = await analyzeRes.json()
-
-            if (analyzeData.success) {
-                addLog("Identity Verified.", 'success')
-                if (analyzeData.enriched.bio) addLog("Extracted Bio.", 'info')
-                if (analyzeData.enriched.interests) addLog(`Extracted ${analyzeData.enriched.interests.length} interests.`, 'info')
-                if (analyzeData.enriched.social_links) addLog(`Found ${analyzeData.enriched.social_links.length} social profiles.`, 'info')
-
-                const updated = await getContactById(contact.id)
-                setContact(updated || null)
-                addToast(`Enrichment complete!`, 'success')
-
-                addLog("Completed successfully.", 'success')
-                setTimeout(() => { setEnriching(false) }, 5000)
-            } else {
-                addLog(`Verification failed: ${analyzeData.reason}`, 'error')
-                addToast(`Enrichment skipped: ${analyzeData.reason}`, 'info')
-                setTimeout(() => { setEnriching(false) }, 5000)
-            }
-
-        } catch (err: any) {
-            console.error(err)
-            addLog(`Error: ${err.message}`, 'error')
-            addToast("Enrichment failed: " + err.message, 'error')
-            setTimeout(() => { setEnriching(false) }, 5000)
-        }
     }
 
     const handleSaveProfile = async () => {
@@ -274,6 +201,112 @@ export default function ContactProfile() {
         } catch (error) {
             console.error("Failed to log interaction", error)
             alert("Failed to save interaction")
+        }
+    }
+
+    const addLog = (message: string, type: 'info' | 'info-bold' | 'success' | 'error' = 'info') => {
+        setEnrichmentLog(prev => [...prev, { message, type }])
+    }
+
+    const handleDeepAnalyze = async () => {
+        if (!contact) return
+        setEnrichmentLog([])
+        setEnriching(true)
+        addLog(`Initiating Deep Analysis for ${contact.name}...`, 'info-bold')
+
+        try {
+            addLog('Starting web search...', 'info')
+
+            const response = await fetch('/.netlify/functions/deep-analyze', {
+                method: 'POST',
+                body: JSON.stringify({
+                    contactId: contact.id,
+                    name: contact.name,
+                    location: contact.location,
+                    job: contact.job,
+                    email: contact.email,
+                    interactions: contact.interactions || []
+                })
+            })
+
+            const data = await response.json()
+
+            // Display detailed logs if available
+            if (data.logs && Array.isArray(data.logs)) {
+                data.logs.forEach((log: string) => addLog(log, 'info'))
+            }
+
+            if (data.success) {
+                addLog(`Found ${data.interests?.length || 0} interests`, 'success')
+
+                // Update contact with results
+                const { updateContact } = await import('../../services/contactService')
+                await updateContact(contact.id, {
+                    interests: data.interests || [],
+                    relationshipSummary: data.relationshipSummary || contact.relationshipSummary
+                })
+
+                // Refresh
+                const { getContactById } = await import('../../services/contactService')
+                const updated = await getContactById(contact.id)
+                if (updated) setContact(updated)
+
+                addLog('Deep Analysis Complete!', 'success')
+                addToast('Analysis completed successfully', 'success')
+            } else {
+                addLog('Analysis failed: ' + (data.error || 'Unknown error'), 'error')
+                addToast('Analysis failed', 'error')
+            }
+        } catch (error: any) {
+            console.error('Deep Analysis error:', error)
+            addLog('Error: ' + error.message, 'error')
+            addToast('Analysis failed', 'error')
+        } finally {
+            setEnriching(false)
+        }
+    }
+
+    const handleRemoveTag = async (tagName: string) => {
+        if (!contact || !contact.tags) return
+        const newTags = contact.tags.filter(t => t !== tagName)
+        const previousContact = { ...contact }
+        setContact({ ...contact, tags: newTags })
+        try {
+            const { updateContact } = await import('../../services/contactService')
+            await updateContact(contact.id, { tags: newTags } as any)
+        } catch (error) {
+            console.error("Failed to remove tag", error)
+            setContact(previousContact)
+            addToast("Failed to remove tag", 'error')
+        }
+    }
+
+    const handleClearAllInterests = async () => {
+        if (!contact || !window.confirm('Are you sure you want to delete all interests, tags, and AI summaries? This will reset the analysis data.')) return
+        try {
+            const { updateContact } = await import('../../services/contactService')
+            // Clear interests, AI summary, relationship summary AND tags
+            await updateContact(contact.id, {
+                interests: [],
+                tags: [],
+                aiSummary: null,
+                relationshipSummary: null,
+                lastAnalyzed: null
+            } as any)
+
+            setContact(prev => prev ? ({
+                ...prev,
+                interests: [],
+                tags: [],
+                aiSummary: undefined,
+                relationshipSummary: undefined,
+                lastAnalyzed: undefined
+            }) : null)
+
+            addToast('All AI analysis data cleared', 'success')
+        } catch (error) {
+            console.error('Failed to clear interests', error)
+            addToast('Failed to clear data', 'error')
         }
     }
 
@@ -442,37 +475,7 @@ export default function ContactProfile() {
                                         </div>
                                         <p className="text-lg text-gray-600 font-medium mb-1">{contact.job || 'No Job Title'}</p>
 
-                                        <div className="flex gap-2 mt-3">
-                                            <button
-                                                onClick={handleEnrichContact}
-                                                disabled={enriching}
-                                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all shadow-sm ${enriching
-                                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300 hover:text-black hover:shadow-md'
-                                                    }`}
-                                            >
-                                                {enriching ? <Sparkles size={16} className="animate-spin text-purple-500" /> : <Search size={16} />}
-                                                {enriching ? 'Enriching...' : 'Find Online Info'}
-                                            </button>
-                                        </div>
                                     </div>
-
-                                    {/* Enrichment Log Display */}
-                                    {enriching && (
-                                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100 font-mono text-xs text-gray-600 space-y-2 max-h-60 overflow-y-auto">
-                                            <div className="flex items-center gap-2 mb-2 font-bold text-gray-800 border-b pb-2">
-                                                <Sparkles size={12} className="text-purple-500" /> enrichment_log.sh
-                                            </div>
-                                            {enrichmentLog.map((log, i) => (
-                                                <div key={i} className="flex gap-2">
-                                                    <span className="text-gray-400">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
-                                                    <span className={log.type === 'error' ? 'text-red-500' : log.type === 'success' ? 'text-green-600 font-bold' : log.type === 'info-bold' ? 'text-blue-700 font-bold' : 'text-gray-700'}>
-                                                        {log.message}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
 
 
                                     <div className="text-sm text-gray-400 mb-4 space-y-1">
@@ -540,14 +543,36 @@ export default function ContactProfile() {
                     Log Interaction
                 </button>
                 <button
-                    onClick={() => setIsAnalyzing(true)}
-                    className="bg-white border border-black text-black px-4 py-2 rounded-md font-bold hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
+                    onClick={handleDeepAnalyze}
+                    disabled={enriching}
+                    className="bg-purple-600 text-white border border-purple-700 px-6 py-2 rounded-md font-bold hover:bg-purple-700 transition-all flex items-center gap-2 text-sm disabled:opacity-50 shadow-sm"
                 >
-                    <Sparkles size={16} /> Analyze
+                    <Sparkles size={16} /> {enriching ? 'Running Deep Analysis...' : 'Deep Analyze'}
                 </button>
 
                 <ConversationStarters contactId={contact.id} />
             </div>
+
+            {/* Enrichment Logs */}
+            {enrichmentLog.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8 font-mono text-sm">
+                    <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
+                        <Globe size={14} /> Analysis Protocol
+                    </h3>
+                    <div className="space-y-1 max-h-60 overflow-y-auto">
+                        {enrichmentLog.map((log, i) => (
+                            <div key={i} className={`
+                                ${log.type === 'error' ? 'text-red-600' :
+                                    log.type === 'success' ? 'text-green-600 font-bold' :
+                                        log.type === 'info-bold' ? 'text-black font-bold' : 'text-gray-600'}
+                            `}>
+                                <span className="text-gray-400 mr-2">[{new Date().toLocaleTimeString()}]</span>
+                                {log.message}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* AI Summary Section */}
             {
@@ -582,7 +607,17 @@ export default function ContactProfile() {
 
             {/* Interest Tags */}
             <div className="mb-10">
-                <h2 className="text-lg font-bold text-black mb-4 tracking-tight">Interests</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-black tracking-tight">Interests</h2>
+                    {contact.interests && contact.interests.length > 0 && (
+                        <button
+                            onClick={handleClearAllInterests}
+                            className="text-xs text-red-500 hover:text-red-700 font-bold uppercase tracking-wide px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        >
+                            Clear All
+                        </button>
+                    )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                     {contact.interests?.map((interest, idx) => (
                         interest.link ? (
@@ -612,6 +647,11 @@ export default function ContactProfile() {
                                     {interest.source === 'instagram' && <span className="text-[10px] bg-pink-100 text-pink-600 px-1.5 rounded font-bold">IG</span>}
                                     {interest.source === 'linkedin' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded font-bold">IN</span>}
                                     {interest.source === 'spotify' && <span className="text-[10px] bg-green-100 text-green-600 px-1.5 rounded font-bold">SP</span>}
+                                    {interest.source === 'ai' && <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 rounded font-bold">AI</span>}
+                                    {interest.source === 'ai_verified' && <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 rounded font-bold">AI</span>}
+                                    {interest.source === 'trusted' && <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 rounded font-bold">✓</span>}
+                                    {interest.source === 'inferred' && <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 rounded font-bold">~</span>}
+                                    {interest.source === 'interaction' && <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 rounded font-bold">AI</span>}
                                 </div>
                                 <button
                                     onClick={() => handleRemoveInterest(interest.name)}
@@ -625,9 +665,18 @@ export default function ContactProfile() {
                     ))}
                     {/* Render extracted tags as well */}
                     {contact.tags?.map((tag, idx) => (
-                        <div key={`tag-${idx}`} className="bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm text-sm">
-                            <span className="text-purple-800 font-medium">#{tag}</span>
-                            <span className="text-[10px] bg-white text-purple-600 px-1.5 rounded font-bold">AI</span>
+                        <div key={`tag-${idx}`} className="flex items-center gap-1 group/tag">
+                            <div className="bg-purple-50 border border-purple-100 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-sm text-sm">
+                                <span className="text-purple-800 font-medium">#{tag}</span>
+                                <span className="text-[10px] bg-white text-purple-600 px-1.5 rounded font-bold">AI</span>
+                            </div>
+                            <button
+                                onClick={() => handleRemoveTag(tag)}
+                                className="opacity-0 group-hover/tag:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-0.5"
+                                title="Remove tag"
+                            >
+                                <X size={14} />
+                            </button>
                         </div>
                     ))}
                     {!contact.interests?.length && !contact.tags?.length && <p className="text-gray-400 italic">No interests detected yet.</p>}

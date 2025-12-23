@@ -33,6 +33,7 @@ export type Contact = {
     snapchat?: string
     healthScore?: number
     lastAnalyzedAt?: string
+    events?: Event[]
 }
 
 export type SocialLink = {
@@ -48,8 +49,11 @@ export type Group = {
 export type Interest = {
     name: string
     frequency: 'high' | 'medium' | 'low'
-    source: 'instagram' | 'discord' | 'whatsapp' | 'manual' | 'linkedin' | 'spotify' | 'ai'
+    source: 'instagram' | 'discord' | 'whatsapp' | 'manual' | 'linkedin' | 'spotify' | 'ai' | 'trusted' | 'inferred' | 'ai_verified' | 'interaction'
     link?: string
+    confidence?: number
+    category?: string
+    last_mentioned_at?: string
 }
 
 export type Interaction = {
@@ -78,4 +82,14 @@ export type GeneratedPrompt = {
     context: string
     status: 'new' | 'used' | 'dismissed'
     createdAt: string
+}
+
+export type Event = {
+    id: string
+    contactId: string
+    description: string
+    date?: string
+    source_url?: string
+    source_type: 'web' | 'manual'
+    created_at?: string
 }

@@ -8,3 +8,6 @@ ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS social_links jsonb DEFAULT 
 
 -- 3. Ensure address exists
 ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS address text;
+
+-- 4. Add coordinates column
+ALTER TABLE public.contacts ADD COLUMN IF NOT EXISTS coordinates point;
